@@ -1647,6 +1647,24 @@ dialog)
     appNewVersion="$(versionFromGit swiftDialog swiftDialog)"
     expectedTeamID="PWA5E9TQ59"
     ;;
+docker)
+    name="Docker"
+    type="dmg"
+    if [[ "$(arch)" == arm64 ]]; then
+        downloadURL="https://desktop.docker.com/mac/stable/arm64/Docker.dmg"
+        appNewVersion=$( curl -fs "https://desktop.docker.com/mac/main/arm64/appcast.xml" | xpath '(//rss/channel/item/enclosure/@sparkle:shortVersionString)[last()]' 2>/dev/null | cut -d '"' -f2 )
+    elif [[ "$(arch)" == i386 ]]; then
+        downloadURL="https://desktop.docker.com/mac/stable/amd64/Docker.dmg"
+        appNewVersion=$( curl -fs "https://desktop.docker.com/mac/main/amd64/appcast.xml" | xpath '(//rss/channel/item/enclosure/@sparkle:shortVersionString)[last()]' 2>/dev/null | cut -d '"' -f2 )
+    fi
+    CLIInstaller="Docker.app/Contents/MacOS/install"
+    CLIArguments=(--accept-license)
+    if [[ "${currentUser}" != "loginwindow" ]];then
+        CLIArguments+=(--user "${currentUser}")
+    fi
+    expectedTeamID="9BNSXJN65R"
+    blockingProcesses=( "Docker Desktop" )
+    ;;
 dockutil)
     name="dockutil"
     type="pkg"
@@ -1962,7 +1980,6 @@ openmtp)
     expectedTeamID="6UR4H85SA2"
     ;;
 openvpnconnectv3)
-    # credit: @lotnix
     name="OpenVPN Connect"
     type="pkgInDmg"
     if [[ $(arch) == "arm64" ]]; then
@@ -1970,8 +1987,8 @@ openvpnconnectv3)
     elif [[ $(arch) == "i386" ]]; then
         pkgName="OpenVPN_Connect_[0-9_()]*_x86_64_Installer_signed.pkg"
     fi
-    appNewVersion=$(curl -fs "https://openvpn.net/vpn-server-resources/openvpn-connect-for-macos-change-log/" | grep -i ">Release notes for " | grep -v beta | head -n 1 | sed "s|.*for \(.*\) .*|\\1|")
     downloadURL="https://openvpn.net/downloads/openvpn-connect-v3-macos.dmg"
+    appNewVersion=$(curl -sI "${downloadURL}" | awk -F'openvpn-connect-|_' '/^[Ll]ocation:/{print $2}')
     curlOptions=( -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.1 Safari/605.1.15" )
     expectedTeamID="ACV7L3WCD8"
     ;;
@@ -1991,9 +2008,24 @@ r)
 rstudio)
     name="RStudio"
     type="dmg"
-    downloadURL="https://download1.rstudio.org/electron/macos/RStudio-2026.04.0-526.dmg"
-    appNewVersion=$( echo "${downloadURL}" | sed -E 's/.*\/[a-zA-Z]*-([0-9.-]*)\..*/\1/g' | sed 's/-/+/' )
+    downloadURL="https://rstudio.org/download/latest/stable/desktop/mac/RStudio-latest.dmg"
+    appNewVersion=$(curl -sfI "$downloadURL" | grep -i "^location" | grep -oE '[0-9]{4}\.[0-9]{2}\.[0-9]{1,2}\-[0-9]+' | sed 's/-/+/')
     expectedTeamID="FYF2F5GFX4"
+    ;;
+splashtopbusiness)
+    name="Splashtop Business"
+    type="pkgInDmg"
+    splashtopbusinessVersions=$(curl -fsL "https://www.splashtop.com/wp-content/themes/responsive/downloadx.php?product=stb&platform=mac-client")
+    downloadURL=$(curl -Ls -w %{url_effective} -o /dev/null $(getJSONValue "$splashtopbusinessVersions" "url"))
+    appNewVersion="${${downloadURL#*INSTALLER_v}%*.dmg}"
+    expectedTeamID="CPQQ3AW49Y"
+    ;;
+splashtopstreamer)
+    name="Splashtop Streamer"
+    type="pkgInDmg"
+    downloadURL=$(curl -fsLI "https://my.splashtop.com/csrs/mac" | grep -i '^location:' | tail -n 1 | cut -d ' ' -f 2 | tr -d '\r')
+    appNewVersion=$(echo $downloadURL | sed -E 's/.*_v([0-9.]+).dmg/\1/')
+    expectedTeamID="CPQQ3AW49Y"
     ;;
 sublimetext)
     # credit: Søren Theilgaard (@theilgaard)
@@ -2041,7 +2073,7 @@ teamviewer)
     versionKey="CFBundleShortVersionString"
     pkgName="Install TeamViewer.app/Contents/Resources/Install TeamViewer.pkg"
     downloadURL="https://download.teamviewer.com/download/TeamViewer.dmg"
-    appNewVersion=$(curl -fs "https://www.teamviewer.com/en/download/macos/" | grep "Current version" | awk -F': ' '{ print $2 }' | sed 's/<[^>]*>//g')
+    appNewVersion=$(curl -fs "https://www.teamviewer.com/en/download/macos/" | grep 'data-json' | grep 'full' | awk -F '"' '{ print $4 }' | sed 's/&quot;/"/g' | plutil -extract "data.0.versionNumber" raw -o - -)
     expectedTeamID="H7UGFBUGV6"
     ;;
 teamviewerqs)
@@ -2097,6 +2129,15 @@ zotero)
     appNewVersion=$(curl -fs "https://www.zotero.org/download/" | grep -Eio '"mac":"(.*)' | cut -d '"' -f 4)
     #Company="Corporation for Digital Scholarship"
     ;;
+nudge)
+    name="Nudge"
+    type="pkg"
+    archiveName="Nudge-[0-9.]*.pkg"
+    downloadURL=$(downloadURLFromGit macadmins Nudge )
+    appNewVersion=$(versionFromGit macadmins Nudge )
+    expectedTeamID="T4SK8ZXCXG"
+    ;;
+
 *)
     # unknown label
     #printlog "unknown label $label"
