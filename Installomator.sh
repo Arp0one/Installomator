@@ -1606,7 +1606,7 @@ audacity)
     appCustomVersion(){ defaults read "/Applications/Audacity.app/Contents/Info.plist" CFBundleVersion | cut -d '.' -f 1-3 }
     expectedTeamID="AWEYX923UX"
     ;;
- arxonebackup)
+arxonebackup)
     name="ArxOne Backup"
     type="pkg"
     packageID="com.arxone.backup"
