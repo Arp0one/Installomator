@@ -347,8 +347,8 @@ if [[ $(/usr/bin/arch) == "arm64" ]]; then
         rosetta2=no
     fi
 fi
-VERSION="10.8beta"
-VERSIONDATE="2025-03-28"
+VERSION="10.9-FR-Custom"
+VERSIONDATE="2026-07-21"
 
 # MARK: Functions
 
@@ -368,9 +368,12 @@ cleanupAndExit() { # $1 = exit code, $2 message, $3 level
 
     # If we closed any processes, reopen the app again
     reopenClosedProcess
-    if [[ -n $2 && $1 -ne 0 ]]; then
+    if [[ $1 -eq 10 ]]; then
+        printlog "$2" INFO
+        updateDialog "wait" "Mise à jour reportée"
+    elif [[ -n $2 && $1 -ne 0 ]]; then
         printlog "ERROR: $2" $3
-        updateDialog "fail" "Error ($1; $2)"
+        updateDialog "fail" "Erreur ($1 ; $2)"
     else
         printlog "$2" $3
         updateDialog "success" ""
@@ -647,7 +650,7 @@ getAppVersion() {
                     appversion=0
                 else
                     if [[ $DIALOG_CMD_FILE != "" ]]; then
-                        updateDialog "wait" "Already installed from App Store. Not replaced."
+                        updateDialog "wait" "Déjà installée depuis l’App Store. Non remplacée."
                         sleep 4
                     fi
                     cleanupAndExit 23 "App previously installed from App Store, and we respect that" ERROR
@@ -700,10 +703,10 @@ checkRunningProcesses() {
 ⚠️ Après la mise à jour, « $x » se rouvrira automatiquement." "L'application « $x » doit être mise à jour.")
                       if [[ $button = "Pas maintenant" ]]; then
                         appClosed=0
-                        cleanupAndExit 0 "user aborted update" INFO
+                        cleanupAndExit 10 "Mise à jour reportée par l’utilisateur" INFO
                       elif [[ $button = "" ]]; then
                         appClosed=0
-                        cleanupAndExit 0 "timed out waiting for user response" INFO
+                        cleanupAndExit 10 "Délai de réponse dépassé, mise à jour reportée" INFO
                       else
                         if [[ $BLOCKING_PROCESS_ACTION = "prompt_user_then_kill" ]]; then
                           # try to quit, then set to kill
@@ -821,7 +824,7 @@ installAppWithPath() { # $1: path to app to install in $targetDir $2: path to fo
 
     # verify with spctl
     printlog "Verifying: $appPath" INFO
-    updateDialog "wait" "Verifying..."
+    updateDialog "wait" "Vérification..."
     printlog "App size: $(du -sh "$appPath")" DEBUG
     appVerify=$(spctl -a -vv "$appPath" 2>&1 )
     appVerifyStatus=$(echo $?)
@@ -850,7 +853,7 @@ installAppWithPath() { # $1: path to app to install in $targetDir $2: path to fo
                 displaynotification "$message" "No update for $name!"
             fi
             if [[ $DIALOG_CMD_FILE != "" ]]; then
-                updateDialog "wait" "Latest version already installed..."
+                updateDialog "wait" "Dernière version déjà installée..."
                 sleep 2
             fi
             cleanupAndExit 0 "No new version to install" REG
@@ -975,7 +978,7 @@ installFromDMG() {
 installFromPKG() {
     # verify with spctl
     printlog "Verifying: $archiveName"
-    updateDialog "wait" "Verifying..."
+    updateDialog "wait" "Vérification..."
     printlog "File list: $(ls -lh "$archiveName")" DEBUG
     printlog "File type: $(file "$archiveName")" DEBUG
     spctlOut=$(spctl -a -vv -t install "$archiveName" 2>&1 )
@@ -1024,7 +1027,7 @@ installFromPKG() {
                     displaynotification "$message" "No update for $name!"
                 fi
                 if [[ $DIALOG_CMD_FILE != "" ]]; then
-                    updateDialog "wait" "Latest version already installed..."
+                    updateDialog "wait" "Dernière version déjà installée..."
                     sleep 2
                 fi
                 cleanupAndExit 0 "No new version to install" REQ
@@ -1248,15 +1251,15 @@ runUpdateTool() {
 }
 
 finishing() {
-    printlog "Finishing..."
+    printlog "Finalisation..."
 
     sleep 3 # wait a moment to let spotlight catch up
     getAppVersion
 
     if [[ -z $appNewVersion ]]; then
-        message="Installed $name"
+        message="$name a été installé"
     else
-        message="Installed $name, version $appNewVersion"
+        message="$name version $appNewVersion a été installé"
     fi
 
     printlog "$message" REQ
@@ -1264,9 +1267,9 @@ finishing() {
     if [[ $currentUser != "loginwindow" && ( $NOTIFY == "success" || $NOTIFY == "all" ) ]]; then
         printlog "notifying"
         if [[ $updateDetected == "YES" ]]; then
-            displaynotification "$message" "$name update complete!"
+            displaynotification "$message" "Mise à jour de $name terminée !"
         else
-            displaynotification "$message" "$name installation complete!"
+            displaynotification "$message" "Installation de $name terminée !"
         fi
     fi
 }
@@ -1334,7 +1337,7 @@ readDownloadPipe() {
         fi
 
         if [[ $char == % ]]; then
-            updateDialog $progress "Downloading..."
+            updateDialog $progress "Téléchargement..."
             progress=""
             keep=0
         fi
@@ -1360,7 +1363,7 @@ readPKGInstallPipe() {
             progress="$progress$char"
         fi
         if [[ $char == . && $keep == 1 ]]; then
-            updateDialog $progress "Installing..."
+            updateDialog $progress "Installation..."
             progress=""
             keep=0
         fi
@@ -2347,6 +2350,23 @@ fi
 getAppVersion
 printlog "appversion: $appversion"
 
+# Prefer the icon of the application being updated in blocking-process dialogs.
+# The configured LOGO value remains a fallback for package-only labels or missing icons.
+if [[ -d "${installedAppPath}" ]]; then
+    appDialogIconName=$(defaults read "${installedAppPath}/Contents/Info.plist" CFBundleIconFile 2>/dev/null)
+    if [[ -n "${appDialogIconName}" ]]; then
+        [[ "${appDialogIconName}" != *.icns ]] && appDialogIconName="${appDialogIconName}.icns"
+        appDialogIconPath="${installedAppPath}/Contents/Resources/${appDialogIconName}"
+    fi
+    if [[ -f "${appDialogIconPath}" ]]; then
+        LOGO="${appDialogIconPath}"
+    else
+        # AppleScript can also use an application bundle as the icon source.
+        LOGO="${installedAppPath}"
+    fi
+    printlog "Using application icon for blocking-process dialog: ${LOGO}" INFO
+fi
+
 # NOTE: Exit if new version is the same as installed version (appNewVersion specified)
 if [[ "$type" != "updateronly" && ($INSTALL == "force" || $IGNORE_APP_STORE_APPS == "yes") ]]; then
     printlog "Label is not of type “updateronly”, and it’s set to use force to install or ignoring app store apps, so not using updateTool."
@@ -2364,7 +2384,7 @@ if [[ -n $appNewVersion ]]; then
                     displaynotification "$message" "No update for $name!"
                 fi
                 if [[ $DIALOG_CMD_FILE != "" ]]; then
-                    updateDialog "complete" "Latest version already installed..."
+                    updateDialog "complete" "Dernière version déjà installée..."
                     sleep 2
                 fi
                 cleanupAndExit 0 "No newer version." REQ
@@ -2380,7 +2400,7 @@ fi
 # MARK: check if this is an Update and we can use updateTool
 if [[ (-n $appversion && -n "$updateTool") || "$type" == "updateronly" ]]; then
     printlog "App needs to be updated and uses $updateTool. Ignoring BLOCKING_PROCESS_ACTION and running updateTool now."
-    updateDialog "wait" "Updating..."
+    updateDialog "wait" "Mise à jour..."
 
     if [[ $DEBUG -ne 1 ]]; then
         if runUpdateTool; then
@@ -2403,9 +2423,9 @@ else
     if [[ $currentUser != "loginwindow" && $NOTIFY == "all" ]]; then
         printlog "notifying"
         if [[ $updateDetected == "YES" ]]; then
-            displaynotification "Downloading $name update" "Download in progress …"
+            displaynotification "Téléchargement de la mise à jour de $name" "Téléchargement en cours…"
         else
-            displaynotification "Downloading new $name" "Download in progress …"
+            displaynotification "Téléchargement de $name" "Téléchargement en cours…"
         fi
     fi
 
@@ -2477,11 +2497,11 @@ printlog "Installing $name" REQ
 if [[ $currentUser != "loginwindow" && $NOTIFY == "all" ]]; then
     printlog "notifying"
     if [[ $updateDetected == "YES" ]]; then
-        displaynotification "Updating $name" "Installation in progress …"
-        updateDialog "wait" "Updating..."
+        displaynotification "Mise à jour de $name" "Installation en cours…"
+        updateDialog "wait" "Mise à jour..."
     else
-        displaynotification "Installing $name" "Installation in progress …"
-        updateDialog "wait" "Installing..."
+        displaynotification "Installation de $name" "Installation en cours…"
+        updateDialog "wait" "Installation..."
     fi
 fi
 
@@ -2518,7 +2538,7 @@ case $type in
         ;;
 esac
 
-updateDialog "wait" "Finishing..."
+updateDialog "wait" "Finalisation..."
 
 # MARK: Finishing — print installed application location and version
 finishing
